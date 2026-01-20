@@ -90,7 +90,7 @@ class FlashTalkPipeline:
         
         self.vae = WanVAE(
             vae_path=os.path.join(checkpoint_dir, config.vae_checkpoint),
-            # dtype=dtype,
+            dtype=self.param_dtype,
             device=self.device,
             parallel=(USE_PARALLEL_VAE and self.use_usp),
         )
@@ -174,7 +174,7 @@ class FlashTalkPipeline:
 
         if isinstance(cond_image, str):
             cond_image = Image.open(cond_image).convert("RGB")
-        cond_image_tensor = resize_and_centercrop(cond_image, (self.target_h, self.target_w)).to(self.device)
+        cond_image_tensor = resize_and_centercrop(cond_image, (self.target_h, self.target_w)).to(dtype=self.param_dtype, device=self.device)
         cond_image_tensor = (cond_image_tensor / 255 - 0.5) * 2
 
         self.cond_image_tensor = cond_image_tensor
@@ -191,7 +191,7 @@ class FlashTalkPipeline:
             self.clip.model.cpu()
             torch.cuda.empty_cache()
 
-        video_frames = torch.zeros(1, cond_image_tensor.shape[1], frame_num-cond_image_tensor.shape[2], self.target_h, self.target_w).to(self.device)
+        video_frames = torch.zeros(1, cond_image_tensor.shape[1], frame_num-cond_image_tensor.shape[2], self.target_h, self.target_w).to(dtype=self.param_dtype, device=self.device)
 
         padding_frames_pixels_values = torch.concat([cond_image_tensor, video_frames], dim=2)
 
@@ -287,7 +287,7 @@ class FlashTalkPipeline:
                 16, (self.frame_num - 1) // 4 + 1,
                 self.lat_h,
                 self.lat_w,
-                dtype=torch.float32,
+                dtype=self.param_dtype,
                 device=self.device,
                 generator=self.generator)
 
@@ -327,7 +327,7 @@ class FlashTalkPipeline:
 
             torch.cuda.synchronize()
             start_decode_time = time.time()
-            videos = self.vae.decode(latent)
+            videos = self.vae.decode(latent.to(self.param_dtype))
             torch.cuda.synchronize()
             end_decode_time = time.time()
             if self.rank == 0:
@@ -338,7 +338,7 @@ class FlashTalkPipeline:
         if self.color_correction_strength > 0.0:
             videos = match_and_blend_colors_torch(videos, self.original_color_reference, self.color_correction_strength)
 
-        cond_frame = videos[:, :, -self.motion_frames_num:].to(self.device).to(torch.float32)
+        cond_frame = videos[:, :, -self.motion_frames_num:].to(self.device)
         torch.cuda.synchronize()
         end_color_correction_time = time.time()
         if self.rank == 0:
@@ -358,4 +358,4 @@ class FlashTalkPipeline:
 
         gen_video_samples = videos[:, :, self.motion_frames_num:]
 
-        return gen_video_samples[0]
+        return gen_video_samples[0].to(torch.float32)
