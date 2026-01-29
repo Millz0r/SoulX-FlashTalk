@@ -1,7 +1,7 @@
 frame_num: 33
 motion_frames_num: 5
 tgt_fps: 25
-sample_rate: 24000
+sample_rate: 16000
 sample_steps: 4
 sample_shift: 5
 color_correction_strength: 1.0
